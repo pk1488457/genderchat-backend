@@ -1,18 +1,15 @@
+import dotenv from 'dotenv';
+dotenv.config();
+
 import express from 'express';
 import mongoose from 'mongoose';
 import cors from 'cors';
-import dotenv from 'dotenv';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import authRoutes from './routes/auth.js';
-import messageRoutes from './routes/message.js';
+import messageRoutes from './routes/messages.js';
 import Message from './models/Message.js';
 import jwt from 'jsonwebtoken';
-import { authLimiter, messageLimiter } from './middleware/rateLimiter.js';
-import { errorHandler } from './middleware/errorHandler.js';
-
-
-dotenv.config();
 
 const app = express();
 const httpServer = createServer(app);
@@ -29,7 +26,6 @@ app.use(express.json());
 
 // Routes
 app.use('/api/auth', authRoutes);
-app.use('/api/auth/register', authLimiter);
 app.use('/api/messages', messageRoutes);
 
 app.get('/', (req, res) => {
@@ -60,7 +56,6 @@ io.on('connection', (socket) => {
   socket.on('join-room', (roomId) => {
     socket.join(roomId);
     console.log(`🚪 User ${socket.userId} joined room: ${roomId}`);
-    console.log(`📊 Room ${roomId} now has ${io.sockets.adapter.rooms.get(roomId)?.size || 0} users`);
   });
 
   socket.on('leave-room', (roomId) => {
@@ -70,7 +65,7 @@ io.on('connection', (socket) => {
 
   socket.on('send-message', async (data) => {
     try {
-      console.log('📨 Received message from', socket.userId, ':', data);
+      console.log('📨 Received message from', socket.userId);
       const { roomId, content, senderName } = data;
 
       const message = new Message({
@@ -81,13 +76,11 @@ io.on('connection', (socket) => {
       });
 
       await message.save();
-      console.log('💾 Message saved to database:', message._id);
+      console.log('💾 Message saved to database');
 
-      // Broadcast to room INCLUDING sender
-      const messageObj = message.toObject();
-      io.to(roomId).emit('new-message', messageObj);
+      // Broadcast to room
+      io.to(roomId).emit('new-message', message.toObject());
       console.log('📢 Message broadcasted to room:', roomId);
-      console.log('👥 Number of clients in room:', io.sockets.adapter.rooms.get(roomId)?.size || 0);
 
     } catch (error) {
       console.error('❌ Error sending message:', error);
@@ -100,13 +93,36 @@ io.on('connection', (socket) => {
   });
 });
 
+// Check environment variables
+const PORT = process.env.PORT || 3000;
+const MONGODB_URI = process.env.MONGODB_URI;
+const JWT_SECRET = process.env.JWT_SECRET;
+
+console.log('🔍 Checking environment variables...');
+console.log('PORT:', PORT);
+console.log('MONGODB_URI:', MONGODB_URI ? '✅ Set' : '❌ Missing');
+console.log('JWT_SECRET:', JWT_SECRET ? '✅ Set' : '❌ Missing');
+console.log('NODE_ENV:', process.env.NODE_ENV || 'development');
+
+if (!MONGODB_URI) {
+  console.error('❌ ERROR: MONGODB_URI environment variable is not set!');
+  console.error('Please add MONGODB_URI to your environment variables in Render dashboard');
+  process.exit(1);
+}
+
+if (!JWT_SECRET) {
+  console.error('❌ ERROR: JWT_SECRET environment variable is not set!');
+  console.error('Please add JWT_SECRET to your environment variables in Render dashboard');
+  process.exit(1);
+}
+
 // MongoDB Connection
-mongoose.connect(process.env.MONGODB_URI)
+mongoose.connect(MONGODB_URI)
   .then(() => {
     console.log('✅ Connected to MongoDB Atlas');
-    const PORT = process.env.PORT || 3000;
-    httpServer.listen(PORT, () => {
+    httpServer.listen(PORT, '0.0.0.0', () => {
       console.log(`🚀 Server running on port ${PORT}`);
+      console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
     });
   })
   .catch((err) => {
