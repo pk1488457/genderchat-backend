@@ -7,7 +7,7 @@ import cors from 'cors';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import authRoutes from './routes/auth.js';
-import messageRoutes from './routes/messages.js';
+import messageRoutes from './routes/message.js';
 import Message from './models/Message.js';
 import jwt from 'jsonwebtoken';
 
